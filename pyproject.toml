@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+[project]
+version = "0.1.0"
+name ="mediscan-62671"
+description = "AI-powered chest X-ray pneumonia detection with full MLOps pipeline"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+  {name = "Your Name", email = "your-email@gmail.com"}
+]
+keywords = ["mlops", "medical-ai", "pneumonia", "chest-xray", "deep-learning"]
+dependencies = [
+    "torch==2.2.0",
+    "torchvision==0.17.0",
+    "fastapi==0.110.0",
+    "uvicorn==0.29.0",
+    "python-multipart==0.0.9",
+    "Pillow==10.2.0",
+    "numpy==1.26.4",
+    "opencv-python-headless==4.9.0.80",
+    "grad-cam==1.4.8",
+    "mlflow==2.11.0",
+    "pymongo==4.6.2",
+    "python-dotenv==1.0.1",
+    "scikit-learn==1.4.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/sunilakiran/mediscan"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mediscan*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

@@ -1,0 +1,10 @@
+mlflow.db
+mlruns/
+*.db
+*.sqlite
+chest_xray/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+mediscan_model.pt

@@ -1,0 +1,277 @@
+"""
+api.py
+FastAPI application for MediScan.
+Endpoints:
+    GET  /health
+    POST /predict
+    GET  /history
+    GET  /stats
+"""
+
+import io
+import base64
+import hashlib
+from datetime import datetime, timezone
+from pathlib import Path
+
+import torch
+import numpy as np
+import cv2
+from PIL import Image
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.image import show_cam_on_image
+from dotenv import load_dotenv
+import os
+
+from mediscan.preprocess import preprocess_single_image
+from mediscan.model import load_model, predict, DEVICE
+
+load_dotenv()
+
+# ── App Setup ───────────────────────────────────────────
+app = FastAPI(
+    title="MediScan API",
+    description="AI-powered chest X-ray pneumonia detection",
+    version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── MongoDB Setup ───────────────────────────────────────
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+DB_NAME   = "mediscan"
+
+try:
+    client     = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    db         = client[DB_NAME]
+    predictions_col   = db["predictions"]
+    training_runs_col = db["training_runs"]
+    print("[api] MongoDB connected ✅")
+except ConnectionFailure:
+    print("[api] MongoDB not available ⚠️")
+
+
+# ── Load Model Once at Startup ──────────────────────────
+MODEL_PATH = os.getenv("MODEL_PATH", "mediscan_model.pt")
+
+try:
+    model = load_model(MODEL_PATH)
+    print("[api] Model loaded ✅")
+except FileNotFoundError:
+    model = None
+    print("[api] Model not found — run train.py first ⚠️")
+
+
+# ── Helper: Generate Grad-CAM ───────────────────────────
+def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
+    """
+    Generate Grad-CAM heatmap and return as base64 string.
+    """
+    if model is None:
+        return ""
+
+    try:
+        target_layer = model.layer4[-1]
+        cam = GradCAM(model=model, target_layers=[target_layer])
+
+        grayscale_cam = cam(
+            input_tensor=tensor.to(DEVICE),
+            targets=None,
+        )[0]
+
+        # Resize original image for overlay
+        img_resized = np.array(
+            image.convert("RGB").resize((224, 224))
+        ) / 255.0
+
+        cam_image = show_cam_on_image(
+            img_resized.astype(np.float32),
+            grayscale_cam,
+            use_rgb=True,
+        )
+
+        # Encode to base64
+        _, buffer = cv2.imencode(".jpg", cam_image)
+        encoded   = base64.b64encode(buffer).decode("utf-8")
+        return encoded
+
+    except Exception as e:
+        print(f"[api] Grad-CAM error: {e}")
+        return ""
+
+
+# ══════════════════════════════════════════════════════
+# ENDPOINTS
+# ══════════════════════════════════════════════════════
+
+# ── GET /health ─────────────────────────────────────────
+@app.get("/health")
+def health():
+    return {
+        "status":        "ok",
+        "model_loaded":  model is not None,
+        "model_path":    MODEL_PATH,
+        "version":       "0.1.0",
+        "timestamp":     datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ── POST /predict ───────────────────────────────────────
+@app.post("/predict")
+async def predict_endpoint(file: UploadFile = File(...)):
+    """
+    Accept a chest X-ray image.
+    Returns: class, probability, risk level,
+             recommendation, and Grad-CAM heatmap.
+    """
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Model not loaded. Run train.py first.",
+        )
+
+    # Validate file type
+    if file.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPEG and PNG images are accepted.",
+        )
+
+    # Read image
+    contents = await file.read()
+    image    = Image.open(io.BytesIO(contents)).convert("RGB")
+
+    # Image hash for audit
+    img_hash = hashlib.sha256(contents).hexdigest()
+
+    # Preprocess
+    tensor = preprocess_single_image(image)
+
+    # Predict
+    result = predict(model, tensor)
+
+    # Grad-CAM
+    gradcam_b64 = generate_gradcam(image, tensor)
+
+    # Build response
+    response = {
+        "image_hash":      img_hash,
+        "predicted_class": result["predicted_class"],
+        "probability":     result["probability"],
+        "risk_level":      result["risk_level"],
+        "recommendation":  result["recommendation"],
+        "gradcam_heatmap": gradcam_b64,
+        "model_version":   "0.1.0",
+        "timestamp":       datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Log to MongoDB
+    try:
+        predictions_col.insert_one({**response, "filename": file.filename})
+        print(f"[api] Prediction logged — {result['predicted_class']}")
+    except Exception as e:
+        print(f"[api] MongoDB log error: {e}")
+
+    return response
+
+
+# ── GET /history ─────────────────────────────────────────
+@app.get("/history")
+def history():
+    """
+    Return last 20 predictions from MongoDB.
+    """
+    try:
+        docs = list(
+            predictions_col.find(
+                {},
+                {"_id": 0, "gradcam_heatmap": 0}
+            ).sort("timestamp", -1).limit(20)
+        )
+        return {"count": len(docs), "predictions": docs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── GET /stats ───────────────────────────────────────────
+@app.get("/stats")
+def stats():
+    """
+    Aggregated stats from MongoDB pipeline only.
+    No Python computation.
+    """
+    try:
+        pipeline = [
+            {
+                "$group": {
+                    "_id": None,
+                    "total_predictions": {"$sum": 1},
+                    "high_risk_count": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$risk_level", "HIGH"]}, 1, 0
+                            ]
+                        }
+                    },
+                    "medium_risk_count": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$risk_level", "MEDIUM"]}, 1, 0
+                            ]
+                        }
+                    },
+                    "low_risk_count": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$risk_level", "LOW"]}, 1, 0
+                            ]
+                        }
+                    },
+                    "avg_probability": {"$avg": "$probability"},
+                    "pneumonia_count": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$predicted_class", "PNEUMONIA"]}, 1, 0
+                            ]
+                        }
+                    },
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "total_predictions": 1,
+                    "high_risk_count":   1,
+                    "medium_risk_count": 1,
+                    "low_risk_count":    1,
+                    "pneumonia_count":   1,
+                    "avg_probability":   {"$round": ["$avg_probability", 4]},
+                }
+            },
+        ]
+
+        result = list(predictions_col.aggregate(pipeline))
+
+        if not result:
+            return {
+                "total_predictions": 0,
+                "high_risk_count":   0,
+                "medium_risk_count": 0,
+                "low_risk_count":    0,
+                "pneumonia_count":   0,
+                "avg_probability":   0.0,
+            }
+
+        return result[0]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,0 +1,13 @@
+# MLflow database
+mlflow.db
+mlruns/
+
+# Model files
+*.pt
+*.pth
+*.pkl
+*.joblib
+
+# Binary files
+*.db
+*.sqlite

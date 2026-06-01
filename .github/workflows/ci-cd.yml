@@ -1,0 +1,77 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ── Step 1: Lint ──────────────────────────────────────
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install flake8
+      - run: flake8 mediscan/ tests/ --max-line-length=120 --ignore=E501,W503,E221,E241,F401,W292,E272,E271,E261,E262,E265,E266,W291,W293,E303,E302,E301,E305,E306
+
+  # ── Step 2: Test ──────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install torch==2.2.0+cpu torchvision==0.17.0+cpu \
+            --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: Run pytest
+        run: pytest -v
+
+  # ── Step 3: Build Docker ──────────────────────────────
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t mediscan:latest .
+
+  # ── Step 4: Push to Docker Hub ────────────────────────
+  push:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Build and Push
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/mediscan:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/mediscan:latest
+
+  # ── Step 5: Deploy to Hugging Face ───────────────────
+  deploy:
+    runs-on: ubuntu-latest
+    needs: push
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "ci@mediscan.ai"
+          git config --global user.name "MediScan CI"
+          git remote add hf https://user:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/${{ secrets.HF_USERNAME }}/mediscan
+          git push hf main --force

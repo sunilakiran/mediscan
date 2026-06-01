@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+
+  # ── MediScan API ──────────────────────────────────────
+  app:
+    build: .
+    container_name: mediscan-app
+    ports:
+      - "7860:7860"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017
+      - MODEL_PATH=mediscan_model.pt
+      - DATA_DIR=chest_xray
+    depends_on:
+      - mongo
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  # ── MongoDB ───────────────────────────────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: mediscan-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  # ── Mongo Express (DB UI) ─────────────────────────────
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mediscan-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_BASICAUTH=false
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
