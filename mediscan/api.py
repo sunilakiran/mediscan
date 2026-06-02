@@ -12,12 +12,11 @@ import io
 import base64
 import hashlib
 from datetime import datetime, timezone
-from pathlib import Path
 
 import torch
 import numpy as np
 import cv2
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
@@ -88,7 +87,6 @@ def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
             targets=None,
         )[0]
 
-        # Resize original image for overlay
         img_resized = np.array(
             image.convert("RGB").resize((224, 224))
         ) / 255.0
@@ -99,7 +97,6 @@ def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
             use_rgb=True,
         )
 
-        # Encode to base64
         _, buffer = cv2.imencode(".jpg", cam_image)
         encoded   = base64.b64encode(buffer).decode("utf-8")
         return encoded
@@ -113,7 +110,6 @@ def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
 # ENDPOINTS
 # ══════════════════════════════════════════════════════
 
-# ── GET /health ─────────────────────────────────────────
 @app.get("/health")
 def health():
     return {
@@ -125,13 +121,12 @@ def health():
     }
 
 
-# ── POST /predict ───────────────────────────────────────
+# ── POST /predict ─────────────────────────────────────── (UPDATED)
 @app.post("/predict")
 async def predict_endpoint(file: UploadFile = File(...)):
     """
     Accept a chest X-ray image.
-    Returns: class, probability, risk level,
-             recommendation, and Grad-CAM heatmap.
+    Supports both normal file upload and base64 data URL.
     """
     if model is None:
         raise HTTPException(
@@ -140,36 +135,55 @@ async def predict_endpoint(file: UploadFile = File(...)):
         )
 
     # Validate file type
-    if file.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
+    if file.content_type and file.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
         raise HTTPException(
             status_code=400,
             detail="Only JPEG and PNG images are accepted.",
         )
 
-    # Read image
+    # Read contents
     contents = await file.read()
 
     if len(contents) == 0:
         raise HTTPException(status_code=400, detail="Empty file received.")
 
+    # === IMPROVED IMAGE LOADING ===
+    image = None
     try:
+        # Try as normal binary image
         image = Image.open(io.BytesIO(contents)).convert("RGB")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image file. Please upload a valid JPEG or PNG.")
+        print(f"[api] ✅ Normal image received: {file.filename}")
+        
+    except (UnidentifiedImageError, Exception):
+        # Try as base64 (common when frontend sends data URL)
+        try:
+            data_str = contents.decode('utf-8').strip()
+            # Remove data URL prefix if exists
+            if data_str.startswith('data:'):
+                data_str = data_str.split(',')[-1]
+            
+            image_data = base64.b64decode(data_str)
+            image = Image.open(io.BytesIO(image_data)).convert("RGB")
+            print("[api] ✅ Base64 image received")
+            
+        except Exception as e:
+            print(f"[api] ❌ Image decode failed: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid image file. Please upload a valid JPEG or PNG image."
+            )
 
-    # Image hash for audit
+    # Image hash
     img_hash = hashlib.sha256(contents).hexdigest()
 
-    # Preprocess
+    # Preprocess & Predict
     tensor = preprocess_single_image(image)
-
-    # Predict
     result = predict(model, tensor)
 
     # Grad-CAM
     gradcam_b64 = generate_gradcam(image, tensor)
 
-    # Build response
+    # Response
     response = {
         "image_hash":      img_hash,
         "predicted_class": result["predicted_class"],
@@ -194,13 +208,10 @@ async def predict_endpoint(file: UploadFile = File(...)):
 # ── GET /history ─────────────────────────────────────────
 @app.get("/history")
 def history():
-    """
-    Return last 20 predictions from MongoDB.
-    """
     try:
         docs = list(
             predictions_col.find(
-                {},
+                {}, 
                 {"_id": 0, "gradcam_heatmap": 0}
             ).sort("timestamp", -1).limit(20)
         )
@@ -212,73 +223,38 @@ def history():
 # ── GET /stats ───────────────────────────────────────────
 @app.get("/stats")
 def stats():
-    """
-    Aggregated stats from MongoDB pipeline only.
-    No Python computation.
-    """
     try:
         pipeline = [
             {
                 "$group": {
                     "_id": None,
                     "total_predictions": {"$sum": 1},
-                    "high_risk_count": {
-                        "$sum": {
-                            "$cond": [
-                                {"$eq": ["$risk_level", "HIGH"]}, 1, 0
-                            ]
-                        }
-                    },
-                    "medium_risk_count": {
-                        "$sum": {
-                            "$cond": [
-                                {"$eq": ["$risk_level", "MEDIUM"]}, 1, 0
-                            ]
-                        }
-                    },
-                    "low_risk_count": {
-                        "$sum": {
-                            "$cond": [
-                                {"$eq": ["$risk_level", "LOW"]}, 1, 0
-                            ]
-                        }
-                    },
+                    "high_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "HIGH"]}, 1, 0]}},
+                    "medium_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "MEDIUM"]}, 1, 0]}},
+                    "low_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "LOW"]}, 1, 0]}},
                     "avg_probability": {"$avg": "$probability"},
-                    "pneumonia_count": {
-                        "$sum": {
-                            "$cond": [
-                                {"$eq": ["$predicted_class", "PNEUMONIA"]}, 1, 0
-                            ]
-                        }
-                    },
+                    "pneumonia_count": {"$sum": {"$cond": [{"$eq": ["$predicted_class", "PNEUMONIA"]}, 1, 0]}},
                 }
             },
             {
                 "$project": {
                     "_id": 0,
                     "total_predictions": 1,
-                    "high_risk_count":   1,
+                    "high_risk_count": 1,
                     "medium_risk_count": 1,
-                    "low_risk_count":    1,
-                    "pneumonia_count":   1,
-                    "avg_probability":   {"$round": ["$avg_probability", 4]},
+                    "low_risk_count": 1,
+                    "pneumonia_count": 1,
+                    "avg_probability": {"$round": ["$avg_probability", 4]},
                 }
             },
         ]
 
         result = list(predictions_col.aggregate(pipeline))
-
-        if not result:
-            return {
-                "total_predictions": 0,
-                "high_risk_count":   0,
-                "medium_risk_count": 0,
-                "low_risk_count":    0,
-                "pneumonia_count":   0,
-                "avg_probability":   0.0,
-            }
-
-        return result[0]
+        return result[0] if result else {
+            "total_predictions": 0, "high_risk_count": 0,
+            "medium_risk_count": 0, "low_risk_count": 0,
+            "pneumonia_count": 0, "avg_probability": 0.0
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
