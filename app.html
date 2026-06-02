@@ -3,110 +3,946 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MediScan — Chest X-Ray Analysis</title>
+<title>MediScan — Advanced Chest X-Ray AI Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
+:root {
+  --bg: #030712;
+  --bg-gradient: radial-gradient(circle at 50% 0%, #0c182c 0%, #030712 100%);
+  --panel-bg: rgba(13, 22, 43, 0.45);
+  --border: rgba(56, 139, 253, 0.15);
+  --border-focus: rgba(0, 229, 255, 0.5);
+  --primary: #00e5ff;
+  --primary-glow: rgba(0, 229, 255, 0.3);
+  --primary-dark: #00acc1;
+  --success: #10b981;
+  --success-glow: rgba(16, 185, 129, 0.2);
+  --danger: #ef4444;
+  --danger-glow: rgba(239, 68, 68, 0.2);
+  --warning: #f59e0b;
+  --warning-glow: rgba(245, 158, 11, 0.2);
+  --text: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-dark: #6b7280;
+  --glow-shadow: 0 0 25px rgba(0, 229, 255, 0.15);
+}
+
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'Segoe UI',sans-serif; background:#0a0f1e; color:#e0e6f0; min-height:100vh; }
-.header { background:linear-gradient(135deg,#0d1b2a,#1a3a5c); padding:20px 40px; display:flex; align-items:center; border-bottom:2px solid #1e4d8c; }
-.header h1 { font-size:28px; font-weight:700; color:#4fc3f7; }
-.header p { font-size:13px; color:#90a4ae; margin-top:2px; }
-.live { background:#1b5e20; color:#a5d6a7; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:600; margin-left:auto; }
-.container { max-width:1100px; margin:40px auto; padding:0 24px; display:grid; grid-template-columns:1fr 1fr; gap:28px; }
-.card { background:#0d1b2a; border:1px solid #1e3a5f; border-radius:16px; padding:28px; }
-.card h2 { font-size:16px; font-weight:600; color:#4fc3f7; margin-bottom:20px; }
-.upload-area { border:2px dashed #1e4d8c; border-radius:12px; padding:40px 20px; text-align:center; cursor:pointer; transition:all 0.3s; position:relative; }
-.upload-area:hover { border-color:#4fc3f7; background:#0a1929; }
-.upload-area input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
-.upload-icon { font-size:48px; margin-bottom:12px; }
-.upload-area p { color:#90a4ae; font-size:14px; margin-top:8px; }
-.preview-img { width:100%; border-radius:12px; margin-top:16px; display:none; max-height:280px; object-fit:contain; background:#060d18; }
-.btn { width:100%; margin-top:20px; padding:14px; background:linear-gradient(135deg,#1565c0,#0288d1); color:white; border:none; border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; transition:all 0.3s; }
-.btn:hover { opacity:0.9; }
-.btn:disabled { background:#263238; color:#546e7a; cursor:not-allowed; }
-.loading { display:none; text-align:center; padding:20px; }
-.spinner { width:40px; height:40px; border:4px solid #1e3a5f; border-top:4px solid #4fc3f7; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 12px; }
-@keyframes spin { to { transform:rotate(360deg); } }
-.result { display:none; }
-.risk-badge { display:inline-block; padding:8px 24px; border-radius:30px; font-size:18px; font-weight:700; margin-bottom:16px; }
-.risk-HIGH { background:#b71c1c; color:#ffcdd2; }
-.risk-MEDIUM { background:#e65100; color:#ffe0b2; }
-.risk-LOW { background:#1b5e20; color:#c8e6c9; }
-.diagnosis { font-size:26px; font-weight:700; margin-bottom:8px; }
-.diagnosis.PNEUMONIA { color:#ef5350; }
-.diagnosis.NORMAL { color:#66bb6a; }
-.prob-bar-wrap { background:#1e3a5f; border-radius:8px; height:10px; margin:16px 0 6px; overflow:hidden; }
-.prob-bar { height:100%; border-radius:8px; transition:width 1s ease; background:linear-gradient(90deg,#1565c0,#ef5350); }
-.prob-label { font-size:13px; color:#90a4ae; margin-bottom:20px; }
-.recommendation { background:#0a1929; border-left:4px solid #4fc3f7; padding:14px 18px; border-radius:0 8px 8px 0; font-size:14px; color:#b0bec5; line-height:1.6; margin-bottom:20px; }
-.meta { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
-.meta-item { background:#0a1929; border:1px solid #1e3a5f; border-radius:8px; padding:12px; }
-.meta-item label { font-size:11px; color:#546e7a; text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:4px; }
-.meta-item span { font-size:15px; font-weight:600; color:#e0e6f0; }
-.heatmap-img { width:100%; border-radius:12px; display:none; max-height:280px; object-fit:contain; background:#060d18; margin-top:12px; }
-.heatmap-label { font-size:12px; color:#546e7a; text-align:center; margin-top:8px; }
-.error-box { display:none; background:#1a0a0a; border:1px solid #b71c1c; border-radius:10px; padding:16px; color:#ef9a9a; font-size:14px; margin-top:16px; }
-@media (max-width:700px) { .container { grid-template-columns:1fr; } }
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: var(--bg);
+  background-image: var(--bg-gradient);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', sans-serif;
+}
+
+/* Header */
+.header {
+  backdrop-filter: blur(12px);
+  background: rgba(3, 7, 18, 0.6);
+  padding: 20px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo-icon {
+  background: linear-gradient(135deg, var(--primary), #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 32px;
+  font-weight: 800;
+  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.4));
+}
+.header-title h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(to right, #ffffff, #9ca3af);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.header-title p {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--success);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.1);
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--success);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Layout Container */
+.container {
+  max-width: 1280px;
+  margin: 30px auto;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 28px;
+}
+
+/* Glass Card */
+.card {
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card:hover {
+  border-color: rgba(0, 229, 255, 0.25);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4), 0 0 30px rgba(0, 229, 255, 0.03);
+}
+.card h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: -0.01em;
+}
+
+/* Tab Navigation */
+.tabs {
+  display: flex;
+  background: rgba(3, 7, 18, 0.5);
+  border: 1px solid var(--border);
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+.tab-btn {
+  flex: 1;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.tab-btn.active {
+  background: rgba(56, 139, 253, 0.15);
+  color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0, 229, 255, 0.05);
+}
+
+/* Inputs & Camera styling */
+.input-content {
+  display: none;
+}
+.input-content.active {
+  display: block;
+}
+
+/* Upload Area */
+.upload-area {
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 45px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  background: rgba(3, 7, 18, 0.2);
+}
+.upload-area:hover {
+  border-color: var(--primary);
+  background: rgba(0, 229, 255, 0.03);
+  box-shadow: inset 0 0 15px rgba(0, 229, 255, 0.05);
+}
+.upload-area input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.upload-icon {
+  font-size: 54px;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.2));
+  animation: float 3s ease-in-out infinite;
+}
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+  100% { transform: translateY(0px); }
+}
+.upload-area p {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+/* Live Camera viewport */
+.camera-viewport {
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--border);
+  position: relative;
+  aspect-ratio: 4/3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#videoFeed {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.camera-overlay {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(0, 229, 255, 0.2);
+  pointer-events: none;
+  z-index: 5;
+}
+.camera-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+/* Tech corners */
+.corner {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--primary);
+  z-index: 6;
+}
+.c-tl { top: 10px; left: 10px; border-right: 0; border-bottom: 0; }
+.c-tr { top: 10px; right: 10px; border-left: 0; border-bottom: 0; }
+.c-bl { bottom: 10px; left: 10px; border-right: 0; border-top: 0; }
+.c-br { bottom: 10px; right: 10px; border-left: 0; border-top: 0; }
+
+.camera-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  padding: 30px;
+  color: var(--text-muted);
+}
+.camera-placeholder-icon {
+  font-size: 48px;
+  opacity: 0.6;
+}
+
+/* Camera controls */
+.camera-controls {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.select-wrapper {
+  position: relative;
+  flex: 1;
+}
+.camera-select {
+  width: 100%;
+  background: rgba(3, 7, 18, 0.8);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  outline: none;
+}
+.camera-select:focus {
+  border-color: var(--primary);
+}
+.select-wrapper::after {
+  content: '▼';
+  font-size: 10px;
+  color: var(--text-muted);
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* Image preview section */
+.preview-container {
+  position: relative;
+  border-radius: 14px;
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  background: rgba(3, 7, 18, 0.4);
+  overflow: hidden;
+  display: none;
+}
+.preview-img-wrapper {
+  position: relative;
+  width: 100%;
+  max-height: 320px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #040814;
+}
+.preview-img {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Scanning Overlay */
+.scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  box-shadow: 0 0 12px var(--primary);
+  display: none;
+  z-index: 10;
+}
+.scanning .scan-line {
+  display: block;
+  animation: scanSweep 2s linear infinite;
+}
+@keyframes scanSweep {
+  0% { top: 0%; }
+  50% { top: 100%; }
+  100% { top: 0%; }
+}
+.scan-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 229, 255, 0.05), transparent);
+  display: none;
+  pointer-events: none;
+  z-index: 9;
+}
+.scanning .scan-shade {
+  display: block;
+  animation: scanShadeSweep 2s linear infinite;
+}
+@keyframes scanShadeSweep {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.preview-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(3, 7, 18, 0.75);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 10;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #1d4ed8, #0ea5e9);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  margin-top: 16px;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
+  font-family: inherit;
+}
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(14, 165, 233, 0.35), 0 0 15px var(--primary-glow);
+  opacity: 0.95;
+}
+.btn:active {
+  transform: translateY(0);
+}
+.btn:disabled {
+  background: rgba(31, 41, 55, 0.6);
+  color: var(--text-dark);
+  border: 1px solid rgba(255,255,255,0.05);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.btn-secondary {
+  background: rgba(56, 139, 253, 0.1);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  box-shadow: none;
+}
+.btn-secondary:hover {
+  background: rgba(56, 139, 253, 0.2);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.1);
+}
+.btn-danger {
+  background: linear-gradient(135deg, #991b1b, var(--danger));
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
+}
+.btn-danger:hover {
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.3), 0 0 15px var(--danger-glow);
+}
+
+/* Loading & Processing State */
+.loading {
+  display: none;
+  text-align: center;
+  padding: 40px 20px;
+}
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(0, 229, 255, 0.1);
+  border-top: 4px solid var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+  filter: drop-shadow(0 0 10px var(--primary-glow));
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Results section styling */
+.result {
+  display: none;
+  animation: fadeIn 0.4s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+}
+.diagnosis {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.diag-PNEUMONIA {
+  background: linear-gradient(to right, #f87171, var(--danger));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.diag-NORMAL {
+  background: linear-gradient(to right, #34d399, var(--success));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 16px;
+  border-radius: 30px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.risk-HIGH {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: var(--danger);
+  box-shadow: 0 0 15px var(--danger-glow);
+}
+.risk-MEDIUM {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: var(--warning);
+  box-shadow: 0 0 15px var(--warning-glow);
+}
+.risk-LOW {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: var(--success);
+  box-shadow: 0 0 15px var(--success-glow);
+}
+
+/* Gauge probability display */
+.prob-section {
+  background: rgba(3, 7, 18, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.prob-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.prob-val {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary);
+  font-family: 'Outfit', sans-serif;
+}
+.prob-bar-wrap {
+  background: #111827;
+  border-radius: 8px;
+  height: 8px;
+  margin: 12px 0 0;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.prob-bar {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(90deg, #3b82f6, var(--primary), var(--danger));
+  width: 0%;
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.recommendation-box {
+  background: rgba(0, 229, 255, 0.03);
+  border-left: 4px solid var(--primary);
+  padding: 16px;
+  border-radius: 0 12px 12px 0;
+  font-size: 14px;
+  color: #d1d5db;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.meta-box {
+  background: rgba(3, 7, 18, 0.4);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+.meta-box label {
+  font-size: 10px;
+  color: var(--text-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.meta-box span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* GradCAM Section */
+.heatmap-card {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+.heatmap-container {
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-top: 12px;
+  background: #040814;
+  display: flex;
+  justify-content: center;
+  max-height: 320px;
+}
+.heatmap-img {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Stats Dashboard and History view */
+.dashboard-grid {
+  grid-column: span 2;
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 28px;
+  margin-top: 10px;
+}
+.stats-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.stat-mini-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.stat-mini-card label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.stat-mini-card .value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 8px;
+  font-family: 'Outfit', sans-serif;
+}
+.stat-mini-card.accent .value {
+  color: var(--primary);
+}
+
+/* History table */
+.history-table-container {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(3, 7, 18, 0.4);
+}
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+.history-table th {
+  background: rgba(3, 7, 18, 0.7);
+  padding: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.history-table td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+.history-table tr:hover td {
+  background: rgba(56, 139, 253, 0.05);
+}
+
+.history-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.hist-PNEUMONIA { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+.hist-NORMAL { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+
+/* Error box */
+.error-box {
+  display: none;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 12px;
+  padding: 16px;
+  color: #fca5a5;
+  font-size: 13px;
+  margin-top: 16px;
+  line-height: 1.5;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.1);
+}
+
+@media (max-width: 900px) {
+  .container { grid-template-columns: 1fr; }
+  .dashboard-grid { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div>
-    <h1>🏥 MediScan</h1>
-    <p>AI-powered Chest X-Ray Pneumonia Detection</p>
+  <div class="header-brand">
+    <div class="logo-icon">🫁</div>
+    <div class="header-title">
+      <h1>MediScan AI</h1>
+      <p>Clinical Chest X-Ray Analytics & Diagnostic Assistant</p>
+    </div>
   </div>
-  <div class="live">● Live</div>
+  <div class="status-pill">
+    <div class="status-dot"></div>
+    <span id="connectionText">SYSTEM ONLINE</span>
+  </div>
 </div>
 
 <div class="container">
 
-  <!-- Upload Card -->
+  <!-- Left: Capture/Upload Card -->
   <div class="card">
-    <h2>📤 Upload Chest X-Ray</h2>
-    <div class="upload-area">
-      <input type="file" id="fileInput" accept="image/*">
-      <div class="upload-icon">🫁</div>
-      <div style="font-size:16px;font-weight:600;color:#4fc3f7">Click or drag X-ray here</div>
-      <p>Supports JPEG, PNG • Chest X-rays only</p>
+    <h2>📥 Diagnostic Image Input</h2>
+    
+    <div class="tabs">
+      <button class="tab-btn active" id="tabUploadBtn" onclick="switchTab('upload')">📁 File Upload</button>
+      <button class="tab-btn" id="tabCameraBtn" onclick="switchTab('camera')">📷 Live Camera</button>
     </div>
-    <img id="previewImg" class="preview-img" alt="Preview">
-    <button class="btn" id="analyzeBtn" disabled onclick="analyze()">🔬 Analyze X-Ray</button>
+
+    <!-- Tab 1: File Upload -->
+    <div class="input-content active" id="uploadTabContent">
+      <div class="upload-area">
+        <input type="file" id="fileInput" accept="image/*">
+        <div class="upload-icon">📁</div>
+        <div style="font-size:16px;font-weight:600;color:var(--primary)">Drag or drop chest X-ray file</div>
+        <p>Supports PNG, JPG, JPEG • Medical scans only</p>
+      </div>
+    </div>
+
+    <!-- Tab 2: Camera Capture -->
+    <div class="input-content" id="cameraTabContent">
+      <div class="camera-viewport">
+        <!-- Live Video -->
+        <video id="videoFeed" autoplay playsinline style="display:none;"></video>
+        
+        <!-- Video Corners overlay -->
+        <div class="camera-overlay" id="cameraOverlay" style="display:none;">
+          <div class="corner c-tl"></div>
+          <div class="corner c-tr"></div>
+          <div class="corner c-bl"></div>
+          <div class="corner c-br"></div>
+        </div>
+
+        <!-- Camera Placeholder -->
+        <div class="camera-placeholder" id="cameraPlaceholder">
+          <div class="camera-placeholder-icon">📷</div>
+          <p>Camera feed is inactive. Start camera to capture a chest X-ray scan directly.</p>
+        </div>
+      </div>
+
+      <!-- Device selection & controls -->
+      <button class="btn btn-secondary" id="startCameraBtn" onclick="startCamera()">📷 Initialize Webcam</button>
+      
+      <div class="camera-controls" id="cameraControls" style="display:none;">
+        <div class="select-wrapper">
+          <select id="cameraSelector" class="camera-select" onchange="changeCamera()"></select>
+        </div>
+        <button class="btn btn-danger" style="margin-top:0; width:auto;" onclick="stopCamera()">🛑 Turn Off</button>
+      </div>
+
+      <button class="btn" id="captureBtn" onclick="captureSnapshot()" style="display:none;">📸 Capture Snapshot</button>
+    </div>
+
+    <!-- Preview Container (shared by both) -->
+    <div class="preview-container" id="previewContainer">
+      <div class="preview-badge" id="previewModeBadge">File Preview</div>
+      <div class="preview-img-wrapper" id="previewImgWrapper">
+        <!-- Laser scan elements -->
+        <div class="scan-line"></div>
+        <div class="scan-shade"></div>
+        <img id="previewImg" class="preview-img" alt="Preview Image">
+      </div>
+    </div>
+
+    <button class="btn" id="analyzeBtn" disabled onclick="analyze()">🔬 Run AI Diagnostics</button>
     <div class="error-box" id="errorBox"></div>
   </div>
 
-  <!-- Result Card -->
-  <div class="card">
-    <h2>📊 Analysis Result</h2>
+  <!-- Right: Analysis Result -->
+  <div class="card" style="display:flex; flex-direction:column;">
+    <h2>📊 Diagnostic Analysis</h2>
 
-    <div class="loading" id="loading">
-      <div class="spinner"></div>
-      <p style="color:#90a4ae">Analyzing X-ray — please wait...</p>
+    <!-- Idle / Placeholder state -->
+    <div id="idleState" style="text-align:center; padding:60px 20px; color:var(--text-muted); flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+      <div style="font-size:52px; margin-bottom:16px; opacity:0.4;">🔬</div>
+      <h3 style="color:#fff; margin-bottom:6px;">No Active Scan</h3>
+      <p style="max-width:300px; font-size:13px;">Provide a chest X-ray image from the left panel and click "Run AI Diagnostics" to retrieve clinical model insights.</p>
     </div>
 
+    <!-- Loading -->
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <h3 style="color:#fff; margin-bottom:6px;">Processing Neural Model</h3>
+      <p style="color:var(--text-muted); font-size:13px;">Analyzing chest structures, evaluating indicators, and computing Grad-CAM visualization...</p>
+    </div>
+
+    <!-- Result Display -->
     <div class="result" id="result">
-      <div class="diagnosis" id="diagnosisText"></div>
-      <div class="risk-badge" id="riskBadge"></div>
-      <div class="prob-bar-wrap">
-        <div class="prob-bar" id="probBar" style="width:0%"></div>
+      <div class="result-header">
+        <div>
+          <label style="font-size:10px; color:var(--text-dark); text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">AI Findings</label>
+          <div class="diagnosis" id="diagnosisText">—</div>
+        </div>
+        <div class="risk-badge" id="riskBadge">—</div>
       </div>
-      <div class="prob-label" id="probLabel"></div>
-      <div class="recommendation" id="recommendation"></div>
-      <div class="meta">
-        <div class="meta-item">
-          <label>Model Version</label>
+
+      <div class="prob-section">
+        <div class="prob-header">
+          <span>Pneumonia Indicator Probability</span>
+          <span class="prob-val" id="probLabel">0%</span>
+        </div>
+        <div class="prob-bar-wrap">
+          <div class="prob-bar" id="probBar"></div>
+        </div>
+      </div>
+
+      <div class="recommendation-box" id="recommendation">
+        —
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-box">
+          <label>Engine Version</label>
           <span id="modelVersion">—</span>
         </div>
-        <div class="meta-item">
-          <label>Time</label>
+        <div class="meta-box">
+          <label>Timestamp</label>
           <span id="timestamp">—</span>
         </div>
       </div>
+
+      <!-- Grad-CAM Section -->
+      <div class="heatmap-card" id="heatmapSection" style="display:none;">
+        <h3 style="font-size:14px; color:var(--primary); margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+          <span>🔥 Grad-CAM Heatmap Activation</span>
+        </h3>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Regions highlighted in orange/red reveal the key visual indicators that informed the neural network's diagnosis.</p>
+        <div class="heatmap-container">
+          <img id="heatmapImg" class="heatmap-img" alt="Grad-CAM Activation Grid">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom: Dashboard / System Stats & Logs -->
+  <div class="dashboard-grid">
+    <!-- Stats Column -->
+    <div class="card" style="padding:24px;">
+      <h2>📈 System Statistics</h2>
+      <div class="stats-cards" id="statsGrid">
+        <div class="stat-mini-card">
+          <label>Total Scans</label>
+          <div class="value" id="statTotal">—</div>
+        </div>
+        <div class="stat-mini-card accent">
+          <label>Avg Prob</label>
+          <div class="value" id="statAvgProb">—</div>
+        </div>
+        <div class="stat-mini-card" style="border-color:rgba(239, 68, 68, 0.15)">
+          <label style="color:#fca5a5;">Pneumonia</label>
+          <div class="value" id="statPneumonia" style="color:var(--danger)">—</div>
+        </div>
+        <div class="stat-mini-card" style="border-color:rgba(16, 185, 129, 0.15)">
+          <label style="color:#a7f3d0;">High Risk</label>
+          <div class="value" id="statHighRisk" style="color:var(--success)">—</div>
+        </div>
+      </div>
     </div>
 
-    <div id="heatmapSection" style="display:none;margin-top:20px">
-      <h2 style="font-size:14px;color:#4fc3f7;margin-bottom:8px">🔥 Grad-CAM Heatmap</h2>
-      <img id="heatmapImg" class="heatmap-img" alt="Grad-CAM Heatmap">
-      <p class="heatmap-label">Highlighted regions influenced the AI diagnosis</p>
+    <!-- History Log Column -->
+    <div class="card" style="padding:24px;">
+      <h2>📜 Recent Scanning Logs</h2>
+      <div class="history-table-container">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Diagnosis</th>
+              <th>Probability</th>
+              <th>Risk</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <tr>
+              <td colspan="4" style="text-align:center; color:var(--text-dark); padding:30px;">No scan history available</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -115,83 +951,410 @@ body { font-family:'Segoe UI',sans-serif; background:#0a0f1e; color:#e0e6f0; min
 <script>
 const API = "https://sunilakiran56-mediscan.hf.space";
 
-const fileInput = document.getElementById("fileInput");
-const previewImg = document.getElementById("previewImg");
-const analyzeBtn = document.getElementById("analyzeBtn");
+// Globals
+let selectedImage = null; // Can hold either File (uploaded) or Blob (captured)
+let activeStream = null;
+let currentCameraMode = 'upload'; // 'upload' or 'camera'
 
+// DOM Elements
+const fileInput = document.getElementById("fileInput");
+const previewContainer = document.getElementById("previewContainer");
+const previewImg = document.getElementById("previewImg");
+const previewModeBadge = document.getElementById("previewModeBadge");
+const analyzeBtn = document.getElementById("analyzeBtn");
+const errorBox = document.getElementById("errorBox");
+
+const videoFeed = document.getElementById("videoFeed");
+const cameraPlaceholder = document.getElementById("cameraPlaceholder");
+const cameraOverlay = document.getElementById("cameraOverlay");
+const startCameraBtn = document.getElementById("startCameraBtn");
+const cameraControls = document.getElementById("cameraControls");
+const cameraSelector = document.getElementById("cameraSelector");
+const captureBtn = document.getElementById("captureBtn");
+
+const idleState = document.getElementById("idleState");
+const loadingEl = document.getElementById("loading");
+const resultEl = document.getElementById("result");
+const previewImgWrapper = document.getElementById("previewImgWrapper");
+
+// Initial Setup
+window.addEventListener("DOMContentLoaded", () => {
+  fetchDashboardStats();
+  fetchScanningHistory();
+});
+
+// File Upload Handler
 fileInput.addEventListener("change", function() {
   const file = this.files[0];
   if (!file) return;
+  
+  selectedImage = file;
   const reader = new FileReader();
   reader.onload = e => {
     previewImg.src = e.target.result;
-    previewImg.style.display = "block";
+    previewModeBadge.textContent = "File Upload";
+    previewContainer.style.display = "block";
+    
+    // Reset and enable analyze button
     analyzeBtn.disabled = false;
-    analyzeBtn.textContent = "🔬 Analyze X-Ray";
+    analyzeBtn.textContent = "🔬 Run AI Diagnostics";
+    errorBox.style.display = "none";
   };
   reader.readAsDataURL(file);
 });
 
-async function analyze() {
-  const file = fileInput.files[0];
-  if (!file) return;
+// Drag and drop events for upload area
+const uploadArea = document.querySelector(".upload-area");
+['dragenter', 'dragover'].forEach(eventName => {
+  uploadArea.addEventListener(eventName, (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = "var(--primary)";
+    uploadArea.style.background = "rgba(0, 229, 255, 0.06)";
+  }, false);
+});
+['dragleave', 'drop'].forEach(eventName => {
+  uploadArea.addEventListener(eventName, (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = "var(--border)";
+    uploadArea.style.background = "rgba(3, 7, 18, 0.2)";
+  }, false);
+});
+uploadArea.addEventListener('drop', (e) => {
+  const dt = e.dataTransfer;
+  const files = dt.files;
+  if (files.length > 0) {
+    fileInput.files = files;
+    fileInput.dispatchEvent(new Event('change'));
+  }
+});
 
-  document.getElementById("loading").style.display = "block";
-  document.getElementById("result").style.display = "none";
+// Tab Switcher
+function switchTab(mode) {
+  if (currentCameraMode === mode) return;
+  
+  currentCameraMode = mode;
+  
+  // Update Buttons
+  document.getElementById("tabUploadBtn").classList.toggle("active", mode === 'upload');
+  document.getElementById("tabCameraBtn").classList.toggle("active", mode === 'camera');
+  
+  // Update Content Panels
+  document.getElementById("uploadTabContent").classList.toggle("active", mode === 'upload');
+  document.getElementById("cameraTabContent").classList.toggle("active", mode === 'camera');
+  
+  // Handle transitions
+  if (mode === 'upload') {
+    stopCamera();
+    // If a file was already loaded, show its preview
+    if (fileInput.files[0]) {
+      selectedImage = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = e => {
+        previewImg.src = e.target.result;
+        previewModeBadge.textContent = "File Upload";
+        previewContainer.style.display = "block";
+        analyzeBtn.disabled = false;
+      };
+      reader.readAsDataURL(fileInput.files[0]);
+    } else {
+      selectedImage = null;
+      previewContainer.style.display = "none";
+      analyzeBtn.disabled = true;
+    }
+  } else {
+    // Switch to Camera Capture
+    selectedImage = null;
+    previewContainer.style.display = "none";
+    analyzeBtn.disabled = true;
+  }
+  
+  errorBox.style.display = "none";
+}
+
+// Camera Management
+async function startCamera() {
+  errorBox.style.display = "none";
+  cameraPlaceholder.style.display = "none";
+  videoFeed.style.display = "block";
+  cameraOverlay.style.display = "block";
+  
+  try {
+    // Initial fetch to get stream & list devices
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: "environment" // Prefer back camera on phones
+      } 
+    });
+    
+    activeStream = stream;
+    videoFeed.srcObject = stream;
+    
+    // Toggle Control Visibility
+    startCameraBtn.style.display = "none";
+    cameraControls.style.display = "flex";
+    captureBtn.style.display = "block";
+    
+    // Populate devices dropdown
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+    
+    cameraSelector.innerHTML = "";
+    videoDevices.forEach(device => {
+      const option = document.createElement("option");
+      option.value = device.deviceId;
+      option.text = device.label || `Camera ${cameraSelector.length + 1}`;
+      cameraSelector.appendChild(option);
+    });
+    
+    // Select active track device id
+    const activeTrack = stream.getVideoTracks()[0];
+    if (activeTrack) {
+      const settings = activeTrack.getSettings();
+      cameraSelector.value = settings.deviceId;
+    }
+    
+  } catch (err) {
+    console.error("Camera access error:", err);
+    errorBox.style.display = "block";
+    errorBox.textContent = `Camera Access Error: ${err.message}. Please verify permissions or check your device connection.`;
+    cameraPlaceholder.style.display = "flex";
+    videoFeed.style.display = "none";
+    cameraOverlay.style.display = "none";
+  }
+}
+
+async function changeCamera() {
+  const deviceId = cameraSelector.value;
+  if (!deviceId) return;
+  
+  // Stop existing tracks
+  if (activeStream) {
+    activeStream.getTracks().forEach(track => track.stop());
+  }
+  
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { 
+        deviceId: { exact: deviceId },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    });
+    activeStream = stream;
+    videoFeed.srcObject = stream;
+  } catch (err) {
+    console.error("Error switching cameras:", err);
+    errorBox.style.display = "block";
+    errorBox.textContent = `Could not switch camera: ${err.message}`;
+  }
+}
+
+function stopCamera() {
+  if (activeStream) {
+    activeStream.getTracks().forEach(track => track.stop());
+    activeStream = null;
+  }
+  videoFeed.srcObject = null;
+  videoFeed.style.display = "none";
+  cameraOverlay.style.display = "none";
+  cameraPlaceholder.style.display = "flex";
+  
+  startCameraBtn.style.display = "block";
+  cameraControls.style.display = "none";
+  captureBtn.style.display = "none";
+}
+
+function captureSnapshot() {
+  if (!activeStream) return;
+  
+  const videoWidth = videoFeed.videoWidth || 640;
+  const videoHeight = videoFeed.videoHeight || 480;
+  
+  const canvas = document.createElement("canvas");
+  canvas.width = videoWidth;
+  canvas.height = videoHeight;
+  
+  const ctx = canvas.getContext("2d");
+  // If front camera, we might want to mirror horizontally. Let's check settings
+  const activeTrack = activeStream.getVideoTracks()[0];
+  const settings = activeTrack ? activeTrack.getSettings() : {};
+  
+  if (settings.facingMode === 'user') {
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+  }
+  
+  ctx.drawImage(videoFeed, 0, 0, canvas.width, canvas.height);
+  
+  canvas.toBlob((blob) => {
+    selectedImage = blob;
+    
+    // Create object url for rendering
+    const imgUrl = URL.createObjectURL(blob);
+    previewImg.src = imgUrl;
+    previewModeBadge.textContent = "Camera Capture";
+    previewContainer.style.display = "block";
+    
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = "🔬 Run AI Diagnostics";
+    errorBox.style.display = "none";
+    
+    // Keep camera active, just notify user snapshot was saved
+    showNotification("Snapshot captured successfully!");
+  }, "image/jpeg", 0.95);
+}
+
+function showNotification(msg) {
+  const prevLabel = analyzeBtn.textContent;
+  analyzeBtn.textContent = `✅ ${msg}`;
+  setTimeout(() => {
+    if (analyzeBtn.textContent.includes(msg)) {
+      analyzeBtn.textContent = prevLabel;
+    }
+  }, 2000);
+}
+
+// Predict Endpoint Trigger
+async function analyze() {
+  if (!selectedImage) return;
+
+  // UI Setup for scanning State
+  idleState.style.display = "none";
+  loadingEl.style.display = "block";
+  resultEl.style.display = "none";
   document.getElementById("heatmapSection").style.display = "none";
-  document.getElementById("errorBox").style.display = "none";
+  errorBox.style.display = "none";
+  
   analyzeBtn.disabled = true;
-  analyzeBtn.textContent = "Analyzing...";
+  analyzeBtn.textContent = "Analyzing Scan...";
+  
+  // Enable laser scan visual overlay on image
+  previewImgWrapper.classList.add("scanning");
 
   try {
     const formData = new FormData();
-    formData.append("file", file);
+    if (selectedImage instanceof File) {
+      formData.append("file", selectedImage);
+    } else {
+      // It's a captured Blob
+      formData.append("file", selectedImage, "camera_capture.jpg");
+    }
 
-    const res = await fetch(`${API}/predict`, { method:"POST", body:formData });
-    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+    const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.detail || `Server reported ${res.status}`);
+    }
+    
     const data = await res.json();
 
-    document.getElementById("loading").style.display = "none";
-    document.getElementById("result").style.display = "block";
+    // Disable Loading State
+    loadingEl.style.display = "none";
+    resultEl.style.display = "block";
 
-    // Diagnosis
-    const diag = document.getElementById("diagnosisText");
-    diag.textContent = data.predicted_class === "PNEUMONIA" ? "⚠️ Pneumonia Detected" : "✅ Normal";
-    diag.className = `diagnosis ${data.predicted_class}`;
+    // Set Diagnosis Output
+    const isPneumonia = data.predicted_class === "PNEUMONIA";
+    const diagEl = document.getElementById("diagnosisText");
+    diagEl.textContent = isPneumonia ? "⚠️ Pneumonia Indicators Detected" : "✅ Normal Lung Structures";
+    diagEl.className = `diagnosis diag-${data.predicted_class}`;
 
-    // Risk
-    const risk = document.getElementById("riskBadge");
-    risk.textContent = `${data.risk_level} RISK`;
-    risk.className = `risk-badge risk-${data.risk_level}`;
+    // Set Risk Badge
+    const riskEl = document.getElementById("riskBadge");
+    riskEl.textContent = `${data.risk_level} RISK`;
+    riskEl.className = `risk-badge risk-${data.risk_level}`;
 
-    // Probability
-    const prob = Math.round(data.probability * 100);
-    document.getElementById("probBar").style.width = `${prob}%`;
-    document.getElementById("probLabel").textContent = `Pneumonia probability: ${prob}%`;
+    // Compute Prob Percentage
+    const probPct = Math.round(data.probability * 100);
+    document.getElementById("probBar").style.width = `${probPct}%`;
+    document.getElementById("probLabel").textContent = `${probPct}%`;
 
-    // Recommendation
+    // Recommendations text
     document.getElementById("recommendation").textContent = data.recommendation;
 
-    // Meta
+    // Metadata details
     document.getElementById("modelVersion").textContent = data.model_version || "0.1.0";
-    document.getElementById("timestamp").textContent = new Date(data.timestamp).toLocaleTimeString();
+    document.getElementById("timestamp").textContent = new Date(data.timestamp).toLocaleString();
 
-    // Grad-CAM
+    // Render Grad-CAM Heatmap
     if (data.gradcam_heatmap) {
-      document.getElementById("heatmapImg").src = `data:image/jpeg;base64,${data.gradcam_heatmap}`;
-      document.getElementById("heatmapImg").style.display = "block";
+      const heatmapImg = document.getElementById("heatmapImg");
+      heatmapImg.src = `data:image/jpeg;base64,${data.gradcam_heatmap}`;
       document.getElementById("heatmapSection").style.display = "block";
     }
 
-  } catch(err) {
-    document.getElementById("loading").style.display = "none";
-    const eb = document.getElementById("errorBox");
-    eb.style.display = "block";
-    eb.textContent = `Error: ${err.message}`;
-  }
+    // Refresh Dashboard values
+    fetchDashboardStats();
+    fetchScanningHistory();
 
-  analyzeBtn.disabled = false;
-  analyzeBtn.textContent = "🔬 Analyze Again";
+  } catch (err) {
+    console.error("Analysis failed:", err);
+    loadingEl.style.display = "none";
+    idleState.style.display = "flex";
+    
+    errorBox.style.display = "block";
+    errorBox.innerHTML = `<strong>Diagnostic Failure:</strong> ${err.message}<br><small>Ensure the API space is online or verify the upload format.</small>`;
+  } finally {
+    // Disable scanner animation
+    previewImgWrapper.classList.remove("scanning");
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = "🔬 Run AI Diagnostics";
+  }
+}
+
+// Fetch stats dashboard values
+async function fetchDashboardStats() {
+  try {
+    const res = await fetch(`${API}/stats`);
+    if (!res.ok) return;
+    const data = await res.json();
+    
+    document.getElementById("statTotal").textContent = data.total_predictions ?? 0;
+    
+    const avgProbVal = data.avg_probability ? Math.round(data.avg_probability * 100) : 0;
+    document.getElementById("statAvgProb").textContent = `${avgProbVal}%`;
+    
+    document.getElementById("statPneumonia").textContent = data.pneumonia_count ?? 0;
+    document.getElementById("statHighRisk").textContent = data.high_risk_count ?? 0;
+  } catch (e) {
+    console.warn("Failed loading stats:", e);
+  }
+}
+
+// Fetch recent history logs
+async function fetchScanningHistory() {
+  try {
+    const res = await fetch(`${API}/history`);
+    if (!res.ok) return;
+    const data = await res.json();
+    
+    const tbody = document.getElementById("historyTableBody");
+    tbody.innerHTML = "";
+    
+    if (!data.predictions || data.predictions.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-dark); padding:30px;">No scan history available</td></tr>`;
+      return;
+    }
+    
+    data.predictions.forEach(item => {
+      const tr = document.createElement("tr");
+      
+      const timeStr = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const diagClass = item.predicted_class === "PNEUMONIA" ? "hist-PNEUMONIA" : "hist-NORMAL";
+      const probPct = Math.round(item.probability * 100);
+      
+      tr.innerHTML = `
+        <td>${timeStr}</td>
+        <td><span class="history-badge ${diagClass}">${item.predicted_class}</span></td>
+        <td>${probPct}%</td>
+        <td style="font-weight:600; color: ${item.risk_level === 'HIGH' ? 'var(--danger)' : item.risk_level === 'MEDIUM' ? 'var(--warning)' : 'var(--success)'}">${item.risk_level}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    console.warn("Failed loading history:", e);
+  }
 }
 </script>
 </body>

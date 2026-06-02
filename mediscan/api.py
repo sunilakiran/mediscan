@@ -24,6 +24,8 @@ from pymongo.errors import ConnectionFailure
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from dotenv import load_dotenv
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import os
 
 from mediscan.preprocess import preprocess_single_image
@@ -45,18 +47,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── MongoDB Setup ───────────────────────────────────────
+# ── MongoDB Setup with In-Memory Fallback ───────────────────
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DB_NAME   = "mediscan"
 
+in_memory_predictions = []
+mongo_available = False
+
 try:
-    client     = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    db         = client[DB_NAME]
-    predictions_col   = db["predictions"]
+    # PyMongo is lazy, so we run a ping command to check if the connection is active
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=1500)
+    client.admin.command('ping')
+    db = client[DB_NAME]
+    predictions_col = db["predictions"]
     training_runs_col = db["training_runs"]
+    mongo_available = True
     print("[api] MongoDB connected ✅")
-except ConnectionFailure:
-    print("[api] MongoDB not available ⚠️")
+except Exception as e:
+    predictions_col = None
+    training_runs_col = None
+    print(f"[api] MongoDB connection failed: {e}. Falling back to in-memory storage. ⚠️")
 
 
 # ── Load Model Once at Startup ──────────────────────────
@@ -109,7 +119,11 @@ def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
 # ══════════════════════════════════════════════════════
 # ENDPOINTS
 # ══════════════════════════════════════════════════════
-
+@app.get("/", response_class=HTMLResponse)
+async def dashboard():
+    """Serve the MediScan dashboard."""
+    with open("app.html", "r") as f:
+        return f.read()
 @app.get("/health")
 def health():
     return {
@@ -195,12 +209,18 @@ async def predict_endpoint(file: UploadFile = File(...)):
         "timestamp":       datetime.now(timezone.utc).isoformat(),
     }
 
-    # Log to MongoDB
-    try:
-        predictions_col.insert_one({**response, "filename": file.filename})
-        print(f"[api] Prediction logged — {result['predicted_class']}")
-    except Exception as e:
-        print(f"[api] MongoDB log error: {e}")
+    # Log prediction
+    log_doc = {**response, "filename": file.filename}
+    if mongo_available:
+        try:
+            predictions_col.insert_one(log_doc)
+            print(f"[api] Prediction logged to MongoDB — {result['predicted_class']}")
+        except Exception as e:
+            print(f"[api] MongoDB log error: {e}. Logging in-memory instead.")
+            in_memory_predictions.insert(0, log_doc)
+    else:
+        in_memory_predictions.insert(0, log_doc)
+        print(f"[api] Prediction logged in-memory — {result['predicted_class']}")
 
     return response
 
@@ -208,53 +228,83 @@ async def predict_endpoint(file: UploadFile = File(...)):
 # ── GET /history ─────────────────────────────────────────
 @app.get("/history")
 def history():
-    try:
-        docs = list(
-            predictions_col.find(
-                {}, 
-                {"_id": 0, "gradcam_heatmap": 0}
-            ).sort("timestamp", -1).limit(20)
-        )
-        return {"count": len(docs), "predictions": docs}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    if mongo_available:
+        try:
+            docs = list(
+                predictions_col.find(
+                    {}, 
+                    {"_id": 0, "gradcam_heatmap": 0}
+                ).sort("timestamp", -1).limit(20)
+            )
+            return {"count": len(docs), "predictions": docs}
+        except Exception as e:
+            print(f"[api] MongoDB history error: {e}. Using in-memory fallback.")
+    
+    # In-memory fallback: return list without heatmaps
+    docs = []
+    for item in in_memory_predictions[:20]:
+        doc_copy = item.copy()
+        doc_copy.pop("gradcam_heatmap", None)
+        docs.append(doc_copy)
+    return {"count": len(docs), "predictions": docs}
 
 
 # ── GET /stats ───────────────────────────────────────────
 @app.get("/stats")
 def stats():
-    try:
-        pipeline = [
-            {
-                "$group": {
-                    "_id": None,
-                    "total_predictions": {"$sum": 1},
-                    "high_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "HIGH"]}, 1, 0]}},
-                    "medium_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "MEDIUM"]}, 1, 0]}},
-                    "low_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "LOW"]}, 1, 0]}},
-                    "avg_probability": {"$avg": "$probability"},
-                    "pneumonia_count": {"$sum": {"$cond": [{"$eq": ["$predicted_class", "PNEUMONIA"]}, 1, 0]}},
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0,
-                    "total_predictions": 1,
-                    "high_risk_count": 1,
-                    "medium_risk_count": 1,
-                    "low_risk_count": 1,
-                    "pneumonia_count": 1,
-                    "avg_probability": {"$round": ["$avg_probability", 4]},
-                }
-            },
-        ]
+    if mongo_available:
+        try:
+            pipeline = [
+                {
+                    "$group": {
+                        "_id": None,
+                        "total_predictions": {"$sum": 1},
+                        "high_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "HIGH"]}, 1, 0]}},
+                        "medium_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "MEDIUM"]}, 1, 0]}},
+                        "low_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "LOW"]}, 1, 0]}},
+                        "avg_probability": {"$avg": "$probability"},
+                        "pneumonia_count": {"$sum": {"$cond": [{"$eq": ["$predicted_class", "PNEUMONIA"]}, 1, 0]}},
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,
+                        "total_predictions": 1,
+                        "high_risk_count": 1,
+                        "medium_risk_count": 1,
+                        "low_risk_count": 1,
+                        "pneumonia_count": 1,
+                        "avg_probability": {"$round": ["$avg_probability", 4]},
+                    }
+                },
+            ]
 
-        result = list(predictions_col.aggregate(pipeline))
-        return result[0] if result else {
+            result = list(predictions_col.aggregate(pipeline))
+            if result:
+                return result[0]
+        except Exception as e:
+            print(f"[api] MongoDB stats error: {e}. Using in-memory fallback.")
+
+    # Calculate in-memory
+    total = len(in_memory_predictions)
+    if total == 0:
+        return {
             "total_predictions": 0, "high_risk_count": 0,
             "medium_risk_count": 0, "low_risk_count": 0,
             "pneumonia_count": 0, "avg_probability": 0.0
         }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    
+    high_risk = sum(1 for p in in_memory_predictions if p["risk_level"] == "HIGH")
+    medium_risk = sum(1 for p in in_memory_predictions if p["risk_level"] == "MEDIUM")
+    low_risk = sum(1 for p in in_memory_predictions if p["risk_level"] == "LOW")
+    pneumonia = sum(1 for p in in_memory_predictions if p["predicted_class"] == "PNEUMONIA")
+    avg_prob = sum(p["probability"] for p in in_memory_predictions) / total
+    
+    return {
+        "total_predictions": total,
+        "high_risk_count": high_risk,
+        "medium_risk_count": medium_risk,
+        "low_risk_count": low_risk,
+        "pneumonia_count": pneumonia,
+        "avg_probability": round(avg_prob, 4)
+    }
