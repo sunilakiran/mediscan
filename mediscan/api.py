@@ -78,6 +78,19 @@ try:
 except FileNotFoundError:
     model = None
     print("[api] Model not found — run train.py first ⚠️")
+    
+    # ── Auto Download Model if not exists ──────────────────
+def ensure_model_exists():
+    if not Path(MODEL_PATH).exists():
+        print("[api] Model not found locally — checking HF Space files...")
+        # Model HF Space files mein hai
+        hf_model = Path("/app/mediscan_model.pt")
+        if hf_model.exists():
+            print("[api] Model found in /app ✅")
+        else:
+            print("[api] Model not found ⚠️")
+
+ensure_model_exists()
 
 
 # ── Helper: Generate Grad-CAM ───────────────────────────
