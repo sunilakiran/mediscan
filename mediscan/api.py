@@ -148,7 +148,14 @@ async def predict_endpoint(file: UploadFile = File(...)):
 
     # Read image
     contents = await file.read()
-    image    = Image.open(io.BytesIO(contents)).convert("RGB")
+
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="Empty file received.")
+
+    try:
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image file. Please upload a valid JPEG or PNG.")
 
     # Image hash for audit
     img_hash = hashlib.sha256(contents).hexdigest()
