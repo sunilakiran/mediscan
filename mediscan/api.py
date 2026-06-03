@@ -72,11 +72,8 @@ except Exception as e:
 
 # ── Load Model Once at Startup ──────────────────────────
 MODEL_PATH = os.getenv("MODEL_PATH", "/data/mediscan_model.pt")
-if not Path(MODEL_PATH).exists():
-    MODEL_PATH = "mediscan_model.pt"
-if not Path(MODEL_PATH).exists():
-    MODEL_PATH = "/app/mediscan_model.pt"
-    
+
+
     # ── Auto Download Model if not exists ──────────────────
 def ensure_model_exists():
     if not Path(MODEL_PATH).exists():
