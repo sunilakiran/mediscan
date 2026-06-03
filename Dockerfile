@@ -26,14 +26,8 @@ RUN pip install --upgrade pip && \
 
 COPY --chown=mediscan:mediscan . .
 
-# Download model at build time
-RUN python -c "
-from huggingface_hub import hf_hub_download
-import shutil
-path = hf_hub_download(repo_id='sunilakiran56/mediscan-model', filename='mediscan_model.pt', repo_type='model')
-shutil.copy(path, 'mediscan_model.pt')
-print('Model downloaded!')
-" || echo "Model download skipped"
+COPY download_model.py .
+RUN python download_model.py || echo "Model download skipped"
 
 USER mediscan
 
