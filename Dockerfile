@@ -2,7 +2,6 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# All system dependencies ek saath
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -13,10 +12,8 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Non root user
 RUN useradd -m -u 1000 mediscan
 
-# Install Python packages
 COPY requirements.txt .
 
 RUN pip install --upgrade pip && \
@@ -27,8 +24,16 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt \
     --extra-index-url https://download.pytorch.org/whl/cpu
 
-# Copy app
 COPY --chown=mediscan:mediscan . .
+
+# Download model at build time
+RUN python -c "
+from huggingface_hub import hf_hub_download
+import shutil
+path = hf_hub_download(repo_id='sunilakiran56/mediscan-model', filename='mediscan_model.pt', repo_type='model')
+shutil.copy(path, 'mediscan_model.pt')
+print('Model downloaded!')
+" || echo "Model download skipped"
 
 USER mediscan
 
