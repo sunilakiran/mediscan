@@ -64,19 +64,17 @@ def download_model_if_needed():
     if not os.path.exists(MODEL_PATH):
         print("[api] Downloading model from HF Hub...")
         try:
+            import shutil
             from huggingface_hub import hf_hub_download
-            hf_hub_download(
+            tmp_path = hf_hub_download(
                 repo_id="sunilakiran56/mediscan-model",
                 filename="mediscan_model.pt",
-                local_dir=".",
                 repo_type="model",
             )
+            shutil.copy(tmp_path, MODEL_PATH)
             print("[api] Model downloaded ✅")
         except Exception as e:
             print(f"[api] Model download failed: {e}")
-
-
-download_model_if_needed()
 
 # ── Load Model ──────────────────────────────────────────
 try:
