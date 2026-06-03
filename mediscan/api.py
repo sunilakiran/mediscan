@@ -74,8 +74,8 @@ def download_model_if_needed():
             shutil.copy(tmp_path, MODEL_PATH)
             print("[api] Model downloaded ✅")
         except Exception as e:
-            print(f"[api] Model download failed: {e}")
 
+            print(f"[api] Model download failed: {e}")
 # ── Load Model ──────────────────────────────────────────
 try:
     model = load_model(MODEL_PATH)
@@ -134,9 +134,8 @@ def health():
 async def predict_endpoint(file: UploadFile = File(...)):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded.")
-
-    if file.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
-        raise HTTPException(status_code=400, detail="Only JPEG and PNG accepted.")
+#Accept all uploads — validate by trying to open
+    
 
     contents = await file.read()
 
