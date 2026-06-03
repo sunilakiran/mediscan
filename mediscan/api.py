@@ -32,6 +32,21 @@ import os
 from mediscan.preprocess import preprocess_single_image
 from mediscan.model import load_model, predict, DEVICE
 
+from huggingface_hub import hf_hub_download
+
+def download_model_if_needed():
+    if not os.path.exists(MODEL_PATH):
+        print("[api] Downloading model from HF Hub...")
+        hf_hub_download(
+            repo_id="sunilakiran56/mediscan-model",
+            filename="mediscan_model.pt",
+            local_dir=".",
+            repo_type="model",
+        )
+        print("[api] Model downloaded ✅")
+
+download_model_if_needed()
+
 load_dotenv()
 
 # ── App Setup ───────────────────────────────────────────
