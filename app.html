@@ -1233,20 +1233,12 @@ async function analyze() {
   // Enable laser scan visual overlay on image
   previewImgWrapper.classList.add("scanning");
 
-  try {
-    const formData = new FormData();
-    if (selectedImage instanceof File) {
-      formData.append("file", selectedImage);
-    } else {
-      // It's a captured Blob
-      formData.append("file", selectedImage, "camera_capture.jpg");
-    }
+ const formData = new FormData();
+const blob = new Blob([await file.arrayBuffer()], { type: "image/jpeg" });
+formData.append("file", blob, file.name || "xray.jpg");
 
-    const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      throw new Error(errBody.detail || `Server reported ${res.status}`);
-    }
+const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
+   
     
     const data = await res.json();
 
