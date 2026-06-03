@@ -70,14 +70,11 @@ except Exception as e:
 
 
 # ── Load Model Once at Startup ──────────────────────────
-MODEL_PATH = os.getenv("MODEL_PATH", "mediscan_model.pt")
-
-try:
-    model = load_model(MODEL_PATH)
-    print("[api] Model loaded ✅")
-except FileNotFoundError:
-    model = None
-    print("[api] Model not found — run train.py first ⚠️")
+MODEL_PATH = os.getenv("MODEL_PATH", "/data/mediscan_model.pt")
+if not Path(MODEL_PATH).exists():
+    MODEL_PATH = "mediscan_model.pt"
+if not Path(MODEL_PATH).exists():
+    MODEL_PATH = "/app/mediscan_model.pt"
     
     # ── Auto Download Model if not exists ──────────────────
 def ensure_model_exists():
@@ -93,10 +90,10 @@ def ensure_model_exists():
 ensure_model_exists()
 
 
-# ── Helper: Generate Grad-CAM ───────────────────────────
 def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
     """
     Generate Grad-CAM heatmap and return as base64 string.
+# ── Helper: Generate Grad-CAM ───────────────────────────
     """
     if model is None:
         return ""
