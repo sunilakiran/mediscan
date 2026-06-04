@@ -553,11 +553,12 @@ async function analyze() {
   previewImgWrapper.classList.add("scanning");
 
   try {
-    formData.append("file", selectedImage, selectedImage.name || "xray.jpg");
+   const formData = new FormData();
+formData.append("file", selectedImage, selectedImage.name || "xray.jpg");
 
-    const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
-    if (!res.ok) throw new Error(`Server reported ${res.status}`);
-    const data = await res.json();
+const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
+if (!res.ok) throw new Error(`Server reported ${res.status}`);
+const data = await res.json();
 
     loadingEl.style.display = "none";
     resultEl.style.display  = "block";
