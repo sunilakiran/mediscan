@@ -553,10 +553,7 @@ async function analyze() {
   previewImgWrapper.classList.add("scanning");
 
   try {
-    const formData = new FormData();
-    const arrayBuf = await selectedImage.arrayBuffer();
-    const blob = new Blob([arrayBuf], { type: "image/jpeg" });
-    formData.append("file", blob, selectedImage.name || "xray.jpg");
+    formData.append("file", selectedImage, selectedImage.name || "xray.jpg");
 
     const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
     if (!res.ok) throw new Error(`Server reported ${res.status}`);
