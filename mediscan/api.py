@@ -129,13 +129,10 @@ def health():
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
-
 @app.post("/predict")
 async def predict_endpoint(file: UploadFile = File(...)):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded.")
-#Accept all uploads — validate by trying to open
-    
 
     contents = await file.read()
 
@@ -169,6 +166,7 @@ async def predict_endpoint(file: UploadFile = File(...)):
         print(f"[api] MongoDB log error: {e}")
 
     return response
+
 
 
 @app.get("/history")
