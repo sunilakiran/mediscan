@@ -1,14 +1,3 @@
-"""
-api.py
-FastAPI application for MediScan.
-Endpoints:
-    GET  /
-    GET  /health
-    POST /predict
-    GET  /history
-    GET  /stats
-"""
-
 import io
 import os
 import base64
@@ -34,85 +23,53 @@ from mediscan.model import load_model, predict, DEVICE
 
 load_dotenv()
 
-# ── App ─────────────────────────────────────────────────
-app = FastAPI(
-    title="MediScan API",
-    description="AI-powered chest X-ray pneumonia detection",
-    version="0.1.0",
-)
+app = FastAPI(title="MediScan API", version="0.1.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ── MongoDB ──────────────────────────────────────────────
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-DB_NAME = "mediscan"
-
 try:
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    db = client[DB_NAME]
+    db = client["mediscan"]
     predictions_col = db["predictions"]
     training_runs_col = db["training_runs"]
     print("[api] MongoDB connected ✅")
 except ConnectionFailure:
     print("[api] MongoDB not available ⚠️")
 
-# ── Model Path ───────────────────────────────────────────
 MODEL_PATH = os.getenv("MODEL_PATH", "mediscan_model.pt")
 
+if not os.path.exists(MODEL_PATH):
+    print("[api] Downloading model from HF Hub...")
+    try:
+        import shutil
+        from huggingface_hub import hf_hub_download
+        tmp = hf_hub_download(
+            repo_id="sunilakiran56/mediscan-model",
+            filename="mediscan_model.pt",
+            repo_type="model",
+        )
+        shutil.copy(tmp, MODEL_PATH)
+        print("[api] Model downloaded ✅")
+    except Exception as e:
+        print(f"[api] Download failed: {e}")
 
-# ── Auto Download Model ──────────────────────────────────
-def download_model_if_needed():
-    if not os.path.exists(MODEL_PATH):
-        print("[api] Downloading model from HF Hub...")
-        try:
-            import shutil
-            from huggingface_hub import hf_hub_download
-            tmp_path = hf_hub_download(
-                repo_id="sunilakiran56/mediscan-model",
-                filename="mediscan_model.pt",
-                repo_type="model",
-            )
-            shutil.copy(tmp_path, MODEL_PATH)
-            print("[api] Model downloaded ✅")
-        except Exception as e:
-            print(f"[api] Model download failed: {e}")
-
-
-download_model_if_needed()
-
-# ── Load Model ───────────────────────────────────────────
 try:
     model = load_model(MODEL_PATH)
     print("[api] Model loaded ✅")
-except FileNotFoundError:
+except Exception:
     model = None
     print("[api] Model not found ⚠️")
 
 
-# ── Grad-CAM ─────────────────────────────────────────────
-def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
+def generate_gradcam(image, tensor):
     if model is None:
         return ""
     try:
         target_layer = model.layer4[-1]
         cam = GradCAM(model=model, target_layers=[target_layer])
-        grayscale_cam = cam(
-            input_tensor=tensor.to(DEVICE),
-            targets=None,
-        )[0]
-        img_resized = np.array(
-            image.convert("RGB").resize((224, 224))
-        ) / 255.0
-        cam_image = show_cam_on_image(
-            img_resized.astype(np.float32),
-            grayscale_cam,
-            use_rgb=True,
-        )
+        grayscale_cam = cam(input_tensor=tensor.to(DEVICE), targets=None)[0]
+        img_resized = np.array(image.convert("RGB").resize((224, 224))) / 255.0
+        cam_image = show_cam_on_image(img_resized.astype(np.float32), grayscale_cam, use_rgb=True)
         _, buffer = cv2.imencode(".jpg", cam_image)
         return base64.b64encode(buffer).decode("utf-8")
     except Exception as e:
@@ -120,17 +77,13 @@ def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
         return ""
 
 
-# ══════════════════════════════════════════════════════════
-# ENDPOINTS
-# ══════════════════════════════════════════════════════════
-
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
     try:
         with open("app.html", "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        return "<h1>MediScan API Running!</h1><p><a href='/docs'>API Docs</a></p>"
+        return "<h1>MediScan API Running!</h1><a href='/docs'>Docs</a>"
 
 
 @app.get("/health")
@@ -138,7 +91,6 @@ def health():
     return {
         "status": "ok",
         "model_loaded": model is not None,
-        "model_path": MODEL_PATH,
         "version": "0.1.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -147,27 +99,18 @@ def health():
 @app.post("/predict")
 async def predict_endpoint(file: UploadFile = File(...)):
     if model is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Model not loaded. Please try again later.",
-        )
+        raise HTTPException(status_code=503, detail="Model not loaded.")
 
-    # Read file bytes
     contents = await file.read()
 
     if len(contents) < 100:
-     raise HTTPException(status_code=400, detail="Empty file received.")
+        raise HTTPException(status_code=400, detail="Empty or invalid file.")
 
-    # Try to open as image — accept any format
     try:
         image = Image.open(io.BytesIO(contents)).convert("RGB")
     except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Could not open image. Please upload a valid JPG or PNG file.",
-        )
+        raise HTTPException(status_code=400, detail="Cannot open image.")
 
-    # Process
     img_hash = hashlib.sha256(contents).hexdigest()
     tensor = preprocess_single_image(image)
     result = predict(model, tensor)
@@ -184,14 +127,10 @@ async def predict_endpoint(file: UploadFile = File(...)):
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
-    # Log to MongoDB
     try:
-        predictions_col.insert_one({
-            **response,
-            "filename": file.filename or "unknown",
-        })
+        predictions_col.insert_one({**response, "filename": file.filename or "unknown"})
     except Exception as e:
-        print(f"[api] MongoDB log error: {e}")
+        print(f"[api] MongoDB error: {e}")
 
     return response
 
@@ -199,12 +138,7 @@ async def predict_endpoint(file: UploadFile = File(...)):
 @app.get("/history")
 def history():
     try:
-        docs = list(
-            predictions_col.find(
-                {},
-                {"_id": 0, "gradcam_heatmap": 0},
-            ).sort("timestamp", -1).limit(20)
-        )
+        docs = list(predictions_col.find({}, {"_id": 0, "gradcam_heatmap": 0}).sort("timestamp", -1).limit(20))
         return {"count": len(docs), "predictions": docs}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -214,69 +148,28 @@ def history():
 def stats():
     try:
         pipeline = [
-            {
-                "$group": {
-                    "_id": None,
-                    "total_predictions": {"$sum": 1},
-                    "high_risk_count": {
-                        "$sum": {
-                            "$cond": [
-                                {"$eq": ["$risk_level", "HIGH"]}, 1, 0
-                            ]
-                        }
-                    },
-                    "medium_risk_count": {
-                        "$sum": {
-                            "$cond": [
-                                {"$eq": ["$risk_level", "MEDIUM"]}, 1, 0
-                            ]
-                        }
-                    },
-                    "low_risk_count": {
-                        "$sum": {
-                            "$cond": [
-                                {"$eq": ["$risk_level", "LOW"]}, 1, 0
-                            ]
-                        }
-                    },
-                    "avg_probability": {"$avg": "$probability"},
-                    "pneumonia_count": {
-                        "$sum": {
-                            "$cond": [
-                                {"$eq": ["$predicted_class", "PNEUMONIA"]}, 1, 0
-                            ]
-                        }
-                    },
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0,
-                    "total_predictions": 1,
-                    "high_risk_count": 1,
-                    "medium_risk_count": 1,
-                    "low_risk_count": 1,
-                    "pneumonia_count": 1,
-                    "avg_probability": {
-                        "$round": ["$avg_probability", 4]
-                    },
-                }
-            },
+            {"$group": {
+                "_id": None,
+                "total_predictions": {"$sum": 1},
+                "high_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "HIGH"]}, 1, 0]}},
+                "medium_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "MEDIUM"]}, 1, 0]}},
+                "low_risk_count": {"$sum": {"$cond": [{"$eq": ["$risk_level", "LOW"]}, 1, 0]}},
+                "avg_probability": {"$avg": "$probability"},
+                "pneumonia_count": {"$sum": {"$cond": [{"$eq": ["$predicted_class", "PNEUMONIA"]}, 1, 0]}},
+            }},
+            {"$project": {
+                "_id": 0,
+                "total_predictions": 1,
+                "high_risk_count": 1,
+                "medium_risk_count": 1,
+                "low_risk_count": 1,
+                "pneumonia_count": 1,
+                "avg_probability": {"$round": ["$avg_probability", 4]},
+            }},
         ]
-
         result = list(predictions_col.aggregate(pipeline))
-
         if not result:
-            return {
-                "total_predictions": 0,
-                "high_risk_count": 0,
-                "medium_risk_count": 0,
-                "low_risk_count": 0,
-                "pneumonia_count": 0,
-                "avg_probability": 0.0,
-            }
-
+            return {"total_predictions": 0, "high_risk_count": 0, "medium_risk_count": 0, "low_risk_count": 0, "pneumonia_count": 0, "avg_probability": 0.0}
         return result[0]
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
