@@ -156,7 +156,7 @@ async def predict_endpoint(file: UploadFile = File(...)):
     contents = await file.read()
 
     if len(contents) < 100:
-    raise HTTPException(status_code=400, detail="Empty file received.")
+     raise HTTPException(status_code=400, detail="Empty file received.")
 
     # Try to open as image — accept any format
     try:
