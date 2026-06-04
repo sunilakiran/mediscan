@@ -554,14 +554,12 @@ async function analyze() {
 
   try {
    const formData = new FormData();
-formData.append("file", selectedImage, selectedImage.name || "xray.jpg");
-
-const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
-if (!res.ok) throw new Error(`Server reported ${res.status}`);
-const data = await res.json();
-
-    loadingEl.style.display = "none";
-    resultEl.style.display  = "block";
+   formData.append("file", selectedImage, selectedImage.name || "xray.jpg");
+   const res = await fetch(`${API}/predict`, { method: "POST", body: formData });
+  if (!res.ok) throw new Error(`Server reported ${res.status}`);
+  const data = await res.json();
+   loadingEl.style.display = "none";
+   resultEl.style.display  = "block";
 
     // Diagnosis
     const diagEl = document.getElementById("diagnosisText");
