@@ -1,6 +1,12 @@
 """
 api.py
 FastAPI application for MediScan.
+Endpoints:
+    GET  /
+    GET  /health
+    POST /predict
+    GET  /history
+    GET  /stats
 """
 
 import io
@@ -28,7 +34,7 @@ from mediscan.model import load_model, predict, DEVICE
 
 load_dotenv()
 
-# ── App Setup ───────────────────────────────────────────
+# ── App ─────────────────────────────────────────────────
 app = FastAPI(
     title="MediScan API",
     description="AI-powered chest X-ray pneumonia detection",
@@ -42,7 +48,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── MongoDB Setup ───────────────────────────────────────
+# ── MongoDB ──────────────────────────────────────────────
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DB_NAME = "mediscan"
 
@@ -55,11 +61,11 @@ try:
 except ConnectionFailure:
     print("[api] MongoDB not available ⚠️")
 
-# ── Model Path ──────────────────────────────────────────
+# ── Model Path ───────────────────────────────────────────
 MODEL_PATH = os.getenv("MODEL_PATH", "mediscan_model.pt")
 
 
-# ── Auto Download Model ─────────────────────────────────
+# ── Auto Download Model ──────────────────────────────────
 def download_model_if_needed():
     if not os.path.exists(MODEL_PATH):
         print("[api] Downloading model from HF Hub...")
@@ -74,9 +80,12 @@ def download_model_if_needed():
             shutil.copy(tmp_path, MODEL_PATH)
             print("[api] Model downloaded ✅")
         except Exception as e:
-
             print(f"[api] Model download failed: {e}")
-# ── Load Model ──────────────────────────────────────────
+
+
+download_model_if_needed()
+
+# ── Load Model ───────────────────────────────────────────
 try:
     model = load_model(MODEL_PATH)
     print("[api] Model loaded ✅")
@@ -85,15 +94,20 @@ except FileNotFoundError:
     print("[api] Model not found ⚠️")
 
 
-# ── Grad-CAM ────────────────────────────────────────────
+# ── Grad-CAM ─────────────────────────────────────────────
 def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
     if model is None:
         return ""
     try:
         target_layer = model.layer4[-1]
         cam = GradCAM(model=model, target_layers=[target_layer])
-        grayscale_cam = cam(input_tensor=tensor.to(DEVICE), targets=None)[0]
-        img_resized = np.array(image.convert("RGB").resize((224, 224))) / 255.0
+        grayscale_cam = cam(
+            input_tensor=tensor.to(DEVICE),
+            targets=None,
+        )[0]
+        img_resized = np.array(
+            image.convert("RGB").resize((224, 224))
+        ) / 255.0
         cam_image = show_cam_on_image(
             img_resized.astype(np.float32),
             grayscale_cam,
@@ -106,14 +120,14 @@ def generate_gradcam(image: Image.Image, tensor: torch.Tensor) -> str:
         return ""
 
 
-# ══════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
 # ENDPOINTS
-# ══════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
     try:
-        with open("app.html", "r") as f:
+        with open("app.html", "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
         return "<h1>MediScan API Running!</h1><p><a href='/docs'>API Docs</a></p>"
@@ -129,21 +143,31 @@ def health():
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
+
 @app.post("/predict")
 async def predict_endpoint(file: UploadFile = File(...)):
     if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded.")
+        raise HTTPException(
+            status_code=503,
+            detail="Model not loaded. Please try again later.",
+        )
 
+    # Read file bytes
     contents = await file.read()
 
-    if len(contents) == 0:
+    if not contents:
         raise HTTPException(status_code=400, detail="Empty file received.")
 
+    # Try to open as image — accept any format
     try:
         image = Image.open(io.BytesIO(contents)).convert("RGB")
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image file.")
+        raise HTTPException(
+            status_code=400,
+            detail="Could not open image. Please upload a valid JPG or PNG file.",
+        )
 
+    # Process
     img_hash = hashlib.sha256(contents).hexdigest()
     tensor = preprocess_single_image(image)
     result = predict(model, tensor)
@@ -160,13 +184,16 @@ async def predict_endpoint(file: UploadFile = File(...)):
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
+    # Log to MongoDB
     try:
-        predictions_col.insert_one({**response, "filename": file.filename})
+        predictions_col.insert_one({
+            **response,
+            "filename": file.filename or "unknown",
+        })
     except Exception as e:
         print(f"[api] MongoDB log error: {e}")
 
     return response
-
 
 
 @app.get("/history")
@@ -174,7 +201,8 @@ def history():
     try:
         docs = list(
             predictions_col.find(
-                {}, {"_id": 0, "gradcam_heatmap": 0}
+                {},
+                {"_id": 0, "gradcam_heatmap": 0},
             ).sort("timestamp", -1).limit(20)
         )
         return {"count": len(docs), "predictions": docs}
@@ -191,17 +219,33 @@ def stats():
                     "_id": None,
                     "total_predictions": {"$sum": 1},
                     "high_risk_count": {
-                        "$sum": {"$cond": [{"$eq": ["$risk_level", "HIGH"]}, 1, 0]}
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$risk_level", "HIGH"]}, 1, 0
+                            ]
+                        }
                     },
                     "medium_risk_count": {
-                        "$sum": {"$cond": [{"$eq": ["$risk_level", "MEDIUM"]}, 1, 0]}
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$risk_level", "MEDIUM"]}, 1, 0
+                            ]
+                        }
                     },
                     "low_risk_count": {
-                        "$sum": {"$cond": [{"$eq": ["$risk_level", "LOW"]}, 1, 0]}
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$risk_level", "LOW"]}, 1, 0
+                            ]
+                        }
                     },
                     "avg_probability": {"$avg": "$probability"},
                     "pneumonia_count": {
-                        "$sum": {"$cond": [{"$eq": ["$predicted_class", "PNEUMONIA"]}, 1, 0]}
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$predicted_class", "PNEUMONIA"]}, 1, 0
+                            ]
+                        }
                     },
                 }
             },
@@ -213,7 +257,9 @@ def stats():
                     "medium_risk_count": 1,
                     "low_risk_count": 1,
                     "pneumonia_count": 1,
-                    "avg_probability": {"$round": ["$avg_probability", 4]},
+                    "avg_probability": {
+                        "$round": ["$avg_probability", 4]
+                    },
                 }
             },
         ]
