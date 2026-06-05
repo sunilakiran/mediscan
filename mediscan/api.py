@@ -102,14 +102,28 @@ async def predict_endpoint(file: UploadFile = File(...)):
         raise HTTPException(status_code=503, detail="Model not loaded.")
 
     contents = await file.read()
+    print(f"[api] Received file: {file.filename}, size: {len(contents)} bytes, type: {file.content_type}")
 
     if len(contents) < 100:
-        raise HTTPException(status_code=400, detail="Empty or invalid file.")
+        raise HTTPException(status_code=400, detail="Empty file received.")
 
+    # Try multiple ways to open image
+    image = None
     try:
         image = Image.open(io.BytesIO(contents)).convert("RGB")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Cannot open image.")
+    except Exception as e1:
+        print(f"[api] PIL error: {e1}")
+        # Try saving to temp file first
+        try:
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                tmp.write(contents)
+                tmp_path = tmp.name
+            image = Image.open(tmp_path).convert("RGB")
+            os.unlink(tmp_path)
+        except Exception as e2:
+            print(f"[api] Temp file error: {e2}")
+            raise HTTPException(status_code=400, detail=f"Cannot open image: {e1}")
 
     img_hash = hashlib.sha256(contents).hexdigest()
     tensor = preprocess_single_image(image)
