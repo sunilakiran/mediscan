@@ -186,90 +186,56 @@ function runAnalysis() {
   document.getElementById("analyzeBtn").disabled      = true;
   document.getElementById("analyzeBtn").textContent   = "Analyzing...";
 
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var blob = new Blob([e.target.result], {type: "image/jpeg"});
-    var fd = new FormData();
-    fd.append("file", blob, "xray.jpg");
-    
-    fetch(API + "/predict", { method: "POST", body: fd })
-      .then(function(res) {
-        if (!res.ok) {
-          return res.json().then(function(e) { throw new Error(e.detail || "Server error " + res.status); });
-        }
-        return res.json();
-      })
-      .then(function(data) {
-        document.getElementById("spinnerBox").style.display = "none";
-        document.getElementById("resultBox").style.display  = "block";
+  var fd = new FormData();
+  fd.append("file", currentFile);
 
-        var isPneu = data.predicted_class === "PNEUMONIA";
-        var diagEl = document.getElementById("diagText");
-        diagEl.textContent = isPneu ? "⚠️ Pneumonia Detected" : "✅ Normal Lung Structures";
-        diagEl.className = "diag " + data.predicted_class;
-
-        var riskEl = document.getElementById("riskBadge");
-        riskEl.textContent = data.risk_level + " RISK";
-        riskEl.className = "risk-badge " + data.risk_level;
-
-        var pct = Math.round(data.probability * 100);
-        document.getElementById("probBar").style.width = pct + "%";
-        document.getElementById("probTxt").textContent = "Pneumonia probability: " + pct + "%";
-        document.getElementById("recBox").textContent  = data.recommendation;
-        document.getElementById("modelVer").textContent = data.model_version || "0.1.0";
-        document.getElementById("timeStamp").textContent = new Date(data.timestamp).toLocaleTimeString();
-
-        if (data.gradcam_heatmap) {
-          document.getElementById("heatmapImg").src = "data:image/jpeg;base64," + data.gradcam_heatmap;
-          document.getElementById("heatmapSection").style.display = "block";
-        } else {
-          document.getElementById("heatmapSection").style.display = "none";
-        }
-
-        loadStats();
-        loadHistory();
-      })
-      .catch(function(err) {
-        document.getElementById("spinnerBox").style.display = "none";
-        document.getElementById("idleBox").style.display    = "block";
-        document.getElementById("errorBox").style.display   = "block";
-        document.getElementById("errorBox").innerHTML = "<strong>Error:</strong> " + err.message;
-      })
-      .finally(function() {
-        document.getElementById("analyzeBtn").disabled    = false;
-        document.getElementById("analyzeBtn").textContent = "🔬 Run AI Diagnostics";
-      });
-  };
-  reader.readAsArrayBuffer(currentFile);
-}
-
-function loadStats() {
-  fetch(API + "/stats").then(function(r) { return r.json(); }).then(function(d) {
-    document.getElementById("stTotal").textContent = d.total_predictions || 0;
-    document.getElementById("stAvg").textContent   = d.avg_probability ? Math.round(d.avg_probability * 100) + "%" : "0%";
-    document.getElementById("stPneu").textContent  = d.pneumonia_count || 0;
-    document.getElementById("stHigh").textContent  = d.high_risk_count || 0;
-  }).catch(function(){});
-}
-
-function loadHistory() {
-  fetch(API + "/history").then(function(r) { return r.json(); }).then(function(d) {
-    var tbody = document.getElementById("histBody");
-    if (!d.predictions || d.predictions.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#546e7a;padding:20px">No history</td></tr>';
-      return;
+  fetch(API + "/predict", { 
+    method: "POST", 
+    body: fd 
+  })
+  .then(res => {
+    if (!res.ok) {
+      return res.json().then(e => { throw new Error(e.detail || "Server error " + res.status); });
     }
-    tbody.innerHTML = d.predictions.map(function(item) {
-      var t   = new Date(item.timestamp).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
-      var pct = Math.round(item.probability * 100);
-      var cls = item.predicted_class === "PNEUMONIA" ? "P" : "N";
-      var rc  = item.risk_level === "HIGH" ? "#ef5350" : item.risk_level === "MEDIUM" ? "#ff9800" : "#66bb6a";
-      return "<tr><td>" + t + "</td><td><span class='hbadge " + cls + "'>" + item.predicted_class + "</span></td><td>" + pct + "%</td><td style='color:" + rc + ";font-weight:bold'>" + item.risk_level + "</td></tr>";
-    }).join("");
-  }).catch(function(){});
-}
+    return res.json();
+  })
+  .then(data => {
+    document.getElementById("spinnerBox").style.display = "none";
+    document.getElementById("resultBox").style.display  = "block";
 
-window.onload = function() { loadStats(); loadHistory(); };
+    var isPneu = data.predicted_class === "PNEUMONIA";
+    var diagEl = document.getElementById("diagText");
+    diagEl.textContent = isPneu ? "⚠️ Pneumonia Detected" : "✅ Normal Lung Structures";
+    diagEl.className = "diag " + data.predicted_class;
+
+    var riskEl = document.getElementById("riskBadge");
+    riskEl.textContent = data.risk_level + " RISK";
+    riskEl.className = "risk-badge " + data.risk_level;
+
+    var pct = Math.round(data.probability * 100);
+    document.getElementById("probBar").style.width = pct + "%";
+    document.getElementById("probTxt").textContent = "Pneumonia probability: " + pct + "%";
+    document.getElementById("recBox").textContent  = data.recommendation || "Consult with a doctor if symptoms persist.";
+
+    document.getElementById("modelVer").textContent = data.model_version || "0.1.0";
+    document.getElementById("timeStamp").textContent = new Date().toLocaleTimeString();
+
+    if (data.gradcam_heatmap) {
+      document.getElementById("heatmapImg").src = "data:image/jpeg;base64," + data.gradcam_heatmap;
+      document.getElementById("heatmapSection").style.display = "block";
+    }
+  })
+  .catch(err => {
+    document.getElementById("spinnerBox").style.display = "none";
+    document.getElementById("idleBox").style.display    = "block";
+    document.getElementById("errorBox").style.display   = "block";
+    document.getElementById("errorBox").innerHTML = "<strong>Error:</strong> " + err.message;
+  })
+  .finally(() => {
+    document.getElementById("analyzeBtn").disabled    = false;
+    document.getElementById("analyzeBtn").textContent = "🔬 Run AI Diagnostics";
+  });
+}
 </script>
 </body>
 </html>
