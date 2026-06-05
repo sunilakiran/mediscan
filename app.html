@@ -187,108 +187,60 @@ function runAnalysis() {
   document.getElementById("analyzeBtn").textContent   = "Analyzing...";
 
   var reader = new FileReader();
-reader.onload = function(e) {
-  var blob = new Blob([e.target.result], {type: "image/jpeg"});
-  var fd = new FormData();
-  fd.append("file", blob, "xray.jpg");
-  
-  fetch(API + "/predict", { method: "POST", body: fd })
-    .then(function(res) {
-      if (!res.ok) {
-        return res.json().then(function(e) { throw new Error(e.detail || "Server error " + res.status); });
-      }
-      return res.json();
-    })
-    .then(function(data) {
-      document.getElementById("spinnerBox").style.display = "none";
-      document.getElementById("resultBox").style.display  = "block";
+  reader.onload = function(e) {
+    var blob = new Blob([e.target.result], {type: "image/jpeg"});
+    var fd = new FormData();
+    fd.append("file", blob, "xray.jpg");
+    
+    fetch(API + "/predict", { method: "POST", body: fd })
+      .then(function(res) {
+        if (!res.ok) {
+          return res.json().then(function(e) { throw new Error(e.detail || "Server error " + res.status); });
+        }
+        return res.json();
+      })
+      .then(function(data) {
+        document.getElementById("spinnerBox").style.display = "none";
+        document.getElementById("resultBox").style.display  = "block";
 
-      var isPneu = data.predicted_class === "PNEUMONIA";
-      var diagEl = document.getElementById("diagText");
-      diagEl.textContent = isPneu ? "⚠️ Pneumonia Detected" : "✅ Normal Lung Structures";
-      diagEl.className = "diag " + data.predicted_class;
+        var isPneu = data.predicted_class === "PNEUMONIA";
+        var diagEl = document.getElementById("diagText");
+        diagEl.textContent = isPneu ? "⚠️ Pneumonia Detected" : "✅ Normal Lung Structures";
+        diagEl.className = "diag " + data.predicted_class;
 
-      var riskEl = document.getElementById("riskBadge");
-      riskEl.textContent = data.risk_level + " RISK";
-      riskEl.className = "risk-badge " + data.risk_level;
+        var riskEl = document.getElementById("riskBadge");
+        riskEl.textContent = data.risk_level + " RISK";
+        riskEl.className = "risk-badge " + data.risk_level;
 
-      var pct = Math.round(data.probability * 100);
-      document.getElementById("probBar").style.width = pct + "%";
-      document.getElementById("probTxt").textContent = "Pneumonia probability: " + pct + "%";
-      document.getElementById("recBox").textContent  = data.recommendation;
-      document.getElementById("modelVer").textContent = data.model_version || "0.1.0";
-      document.getElementById("timeStamp").textContent = new Date(data.timestamp).toLocaleTimeString();
+        var pct = Math.round(data.probability * 100);
+        document.getElementById("probBar").style.width = pct + "%";
+        document.getElementById("probTxt").textContent = "Pneumonia probability: " + pct + "%";
+        document.getElementById("recBox").textContent  = data.recommendation;
+        document.getElementById("modelVer").textContent = data.model_version || "0.1.0";
+        document.getElementById("timeStamp").textContent = new Date(data.timestamp).toLocaleTimeString();
 
-      if (data.gradcam_heatmap) {
-        document.getElementById("heatmapImg").src = "data:image/jpeg;base64," + data.gradcam_heatmap;
-        document.getElementById("heatmapSection").style.display = "block";
-      } else {
-        document.getElementById("heatmapSection").style.display = "none";
-      }
+        if (data.gradcam_heatmap) {
+          document.getElementById("heatmapImg").src = "data:image/jpeg;base64," + data.gradcam_heatmap;
+          document.getElementById("heatmapSection").style.display = "block";
+        } else {
+          document.getElementById("heatmapSection").style.display = "none";
+        }
 
-      loadStats();
-      loadHistory();
-    })
-    .catch(function(err) {
-      document.getElementById("spinnerBox").style.display = "none";
-      document.getElementById("idleBox").style.display    = "block";
-      document.getElementById("errorBox").style.display   = "block";
-      document.getElementById("errorBox").innerHTML = "<strong>Error:</strong> " + err.message;
-    })
-    .finally(function() {
-      document.getElementById("analyzeBtn").disabled    = false;
-      document.getElementById("analyzeBtn").textContent = "🔬 Run AI Diagnostics";
-    });
-};
-reader.readAsArrayBuffer(currentFile);
-return;
-
-  .then(function(res) {
-      if (!res.ok) {
-        return res.json().then(function(e) { throw new Error(e.detail || "Server error " + res.status); });
-      }
-      return res.json();
-    })
-    .then(function(data) {
-      document.getElementById("spinnerBox").style.display = "none";
-      document.getElementById("resultBox").style.display  = "block";
-
-      var isPneu = data.predicted_class === "PNEUMONIA";
-      var diagEl = document.getElementById("diagText");
-      diagEl.textContent = isPneu ? "⚠️ Pneumonia Detected" : "✅ Normal Lung Structures";
-      diagEl.className = "diag " + data.predicted_class;
-
-      var riskEl = document.getElementById("riskBadge");
-      riskEl.textContent = data.risk_level + " RISK";
-      riskEl.className = "risk-badge " + data.risk_level;
-
-      var pct = Math.round(data.probability * 100);
-      document.getElementById("probBar").style.width = pct + "%";
-      document.getElementById("probTxt").textContent = "Pneumonia probability: " + pct + "%";
-      document.getElementById("recBox").textContent  = data.recommendation;
-      document.getElementById("modelVer").textContent = data.model_version || "0.1.0";
-      document.getElementById("timeStamp").textContent = new Date(data.timestamp).toLocaleTimeString();
-
-      if (data.gradcam_heatmap) {
-        document.getElementById("heatmapImg").src = "data:image/jpeg;base64," + data.gradcam_heatmap;
-        document.getElementById("heatmapSection").style.display = "block";
-      } else {
-        document.getElementById("heatmapSection").style.display = "none";
-      }
-
-      loadStats();
-      loadHistory();
-    })
-    .catch(function(err) {
-      document.getElementById("spinnerBox").style.display = "none";
-      document.getElementById("idleBox").style.display    = "block";
-      document.getElementById("errorBox").style.display   = "block";
-      document.getElementById("errorBox").innerHTML = "<strong>Error:</strong> " + err.message;
-    })
-    .finally(function() {
-      document.getElementById("analyzeBtn").disabled    = false;
-      document.getElementById("analyzeBtn").textContent = "🔬 Run AI Diagnostics";
-    });
+        loadStats();
+        loadHistory();
+      })
+      .catch(function(err) {
+        document.getElementById("spinnerBox").style.display = "none";
+        document.getElementById("idleBox").style.display    = "block";
+        document.getElementById("errorBox").style.display   = "block";
+        document.getElementById("errorBox").innerHTML = "<strong>Error:</strong> " + err.message;
+      })
+      .finally(function() {
+        document.getElementById("analyzeBtn").disabled    = false;
+        document.getElementById("analyzeBtn").textContent = "🔬 Run AI Diagnostics";
+      });
+  };
+  reader.readAsArrayBuffer(currentFile);
 }
 
 function loadStats() {
